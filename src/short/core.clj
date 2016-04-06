@@ -73,6 +73,38 @@
     `(-> (circuit)
          ~@injected)))
 
+(defn caching
+  "Returns cached responses when available to reduce load on a dependency.
+  `cache` should be a clojure.core.cache.CacheProtocol implementation. If
+  `intercept` is false, cached responses will only be returned when the call
+  to the dependency fails."
+  ([handler cache intercept]
+   (let [cache-atom (atom cache)]
+     (fn [circuit & args]
+       (if intercept
+         ; Check the cache first, then hit the dependency.
+         (let [c @cache-atom]
+           (if (cache/has? c args)
+             (let [result (cache/lookup c args)]
+               (swap! cache-atom cache/hit args)
+               result)
+             (let [result (apply handler args)]
+               (swap! cache-atom cache/miss args result)
+               result)))
+         ; Hit the dependency, and only check the cache if it fails.
+         (try
+           (let [result (apply handler args)]
+             (swap! cache-atom cache/miss args result)
+             result)
+           (catch Exception ex
+             (let [c @cache-atom]
+               (if (cache/has? c args)
+                 (let [result (cache/lookup c args)]
+                   (swap! cache-atom cache/hit args)
+                   result)
+                 (throw ex)))))))))
+  ([handler cache] (caching handler cache true)))
+
 (defn concurrency-limit
   "Limits how many calls through the circuit can currently be active, in case
   the dependency starts backing up."

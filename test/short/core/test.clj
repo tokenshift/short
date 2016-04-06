@@ -1,7 +1,8 @@
 (ns short.core.test
   (:use [clojure.test]
         [short.core])
-  (:require [clj-time.core :as t]))
+  (:require [clj-time.core :as t]
+            [clojure.core.cache :as cache]))
 
 (defn failer
   "Returns a function that can be forced to start failing or succeeding on
@@ -40,6 +41,30 @@
   [failer]
   (reset! (::failing (meta failer)) false)
   failer)
+
+(deftest test-caching-with-interception
+  (let [f (-> (failer) (set-rval! :foo))
+        c (circuit-> (caching (cache/->BasicCache {}) true))]
+    (is (= 0 (count (failer-calls f))))
+    (is (= :foo (call! c f)))
+    (is (= 1 (count (failer-calls f))))
+    (set-rval! f :foo2)
+    (is (= :foo (call! c f)))
+    (is (= 1 (count (failer-calls f))))))
+
+(deftest test-caching-without-interception
+  (let [f (-> (failer) (set-rval! :foo))
+        c (circuit-> (caching (cache/->BasicCache {}) false))]
+    (is (= 0 (count (failer-calls f))))
+    (is (= :foo (call! c f)))
+    (is (= 1 (count (failer-calls f))))
+    (set-rval! f :foo2)
+    (is (= :foo2 (call! c f)))
+    (is (= 2 (count (failer-calls f))))
+    (start-failing! f)
+    (set-rval! f :foo3)
+    (is (= :foo2 (call! c f)))
+    (is (= 3 (count (failer-calls f))))))
 
 (deftest test-concurrency-limit
   (let [plug (promise)
