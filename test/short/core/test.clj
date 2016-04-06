@@ -172,3 +172,23 @@
     (is (nil? (call! c f)))
     (is (nil? (call! c f)))
     (is (thrown? Exception (call! c f)))))
+
+(deftest test-timeout
+  (let [c (circuit-> (timeout 50))]
+    (let [plug (promise)
+          plugged (fn [] @plug :success)
+          call (future (call! c plugged))]
+      (deliver plug nil)
+      (is (= :success @call)))
+    (let [plug (promise)
+          plugged (fn [] @plug :success)
+          call (future (call! c plugged))]
+      (Thread/sleep 100)
+      (deliver plug nil)
+      (is (thrown-with-msg? Exception #"timed out" @call)))
+    (let [plug (promise)
+          plugged (fn [] @plug (throw (Exception. "FAILED!")))
+          call (future (call! c plugged))]
+      (Thread/sleep 100)
+      (deliver plug nil)
+      (is (thrown-with-msg? Exception #"timed out" @call)))))

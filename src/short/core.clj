@@ -174,6 +174,14 @@
             (finally
               (swap! log conj (c/to-long (t/now))))))))))
 
+(defn timeout
+  "Adds a configurable timeout to a dependency."
+  [handler timeout-ms]
+  (fn [circuit & args]
+    (let [result (deref (future (apply handler args)) timeout-ms ::timeout)]
+      (if (= ::timeout result)
+        (throw (ex-info "request timed out" {:timeout-ms timeout-ms}))
+        result))))
 
 ;; ## Proposed Strategies
 ;; * Timeout
