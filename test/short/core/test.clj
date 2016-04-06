@@ -150,9 +150,9 @@
     (call! c f)
     (is (closed? c))))
 
-(deftest test-rps-throttle
+(deftest test-throttle
   (let [f (failer)
-        c (circuit-> (rps-throttle 5))]
+        c (circuit-> (throttle 5 (t/seconds 1)))]
     (is (nil? (call! c f)))
     (is (nil? (call! c f)))
     (is (nil? (call! c f)))

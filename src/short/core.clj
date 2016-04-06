@@ -158,19 +158,21 @@
       (when (and (nil? @deadline) (open? circuit))
         (reset! deadline (t/from-now ttl))))))
 
-(defn rps-throttle
-  "Throttles the number of requests that will be passed through to the dependency."
-  [handler rps]
-  (let [requests (atom [])]
+(defn throttle
+  "Throttles the number of requests that will be passed through to the
+  dependency. `cap` is the count of requests that will be passed through in the
+  specified `period` (as a clj-time Interval)."
+  [handler cap period]
+  (let [log (atom [])]
     (fn [circuit & args]
-      (let [cutoff (c/to-long (t/ago (t/seconds 1)))
+      (let [cutoff (c/to-long (t/ago period))
             cleanup (fn [reqs] (drop-while #(< % cutoff) reqs))]
-        (if (>= (count (swap! requests cleanup)) rps)
-          (throw (ex-info "request throttling in effect" {:rps rps}))
+        (if (>= (count (swap! log cleanup)) cap)
+          (throw (ex-info "request throttling in effect" {:cap cap :period period}))
           (try
             (apply handler args)
             (finally
-              (swap! requests conj (c/to-long (t/now))))))))))
+              (swap! log conj (c/to-long (t/now))))))))))
 
 
 ;; ## Proposed Strategies
