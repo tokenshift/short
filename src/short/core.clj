@@ -3,7 +3,7 @@
             [clj-time.core :as t]
             [clojure.core.cache :as cache]))
 
-;; # Base circuit definition
+;; # Circuit Breakers
 
 (defn- default-handler
   [f & args]
@@ -41,7 +41,7 @@
   [circuit & args]
   (apply (::handler circuit) circuit args))
 
-;; # Circuit strategies
+;; # Circuit Strategies
 ;;
 ;; Each of these wraps a circuit with additional behavior such as breaking the
 ;; circuit if a certain number of requests fails, or returning a cached
@@ -201,6 +201,3 @@
       (if (= ::timeout result)
         (throw (ex-info "request timed out" {:timeout-ms timeout-ms}))
         result))))
-
-; Odd use case: circuit breaker that breaks only for particular arguments
-; (e.g. if a given URL can't be retrieved, only break for that URL).
