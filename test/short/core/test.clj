@@ -2,7 +2,8 @@
   (:use [clojure.test]
         [short.core])
   (:require [clj-time.core :as t]
-            [clojure.core.cache :as cache]))
+            [clojure.core.cache :as cache]
+            [short.interval :as interval]))
 
 (defn failer
   "Returns a function that can be forced to start failing or succeeding on
@@ -149,6 +150,22 @@
     (Thread/sleep 50)
     (call! c f)
     (is (closed? c))))
+
+(deftest test-retry
+  (let [f (-> (failer) (start-failing!))
+        c (circuit-> (retry (interval/static 50 5)))
+        start (t/now)]
+    (is (= 0 (count (failer-calls f))))
+    (is (thrown? Exception (call! c f)))
+    (is (= 5 (count (failer-calls f))))
+    (is (t/after? (t/now) (t/plus start (t/millis 200)))))
+  (let [f (-> (failer) (start-failing!))
+        c (circuit-> (retry (interval/doubling 50 4)))
+        start (t/now)]
+    (is (= 0 (count (failer-calls f))))
+    (is (thrown? Exception (call! c f)))
+    (is (= 4 (count (failer-calls f))))
+    (is (t/after? (t/now) (t/plus start (t/millis (+ 50 100 200)))))))
 
 (deftest test-throttle
   (let [f (failer)

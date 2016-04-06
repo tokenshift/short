@@ -158,6 +158,25 @@
       (when (and (nil? @deadline) (open? circuit))
         (reset! deadline (t/from-now ttl))))))
 
+(defn retry
+  "Retries any failing calls at a configurable interval.
+  `start-interval` should be the interval in milliseconds; `interval-fn` will
+  be passed the number of attempts that have been made and should return the
+  interval, or nil to stop retrying (0 to retry without waiting)."
+  [handler interval-fn]
+  (fn [circuit & args]
+    (loop [tries 1]
+      (let [result (try
+                     (apply handler args)
+                     (catch Exception ex
+                       (let [interval (interval-fn tries)]
+                         (when (nil? interval) (throw ex))
+                         (when (> interval 0) (Thread/sleep interval))
+                         ::retry)))]
+        (if (= ::retry result)
+          (recur (+ 1 tries))
+          result)))))
+
 (defn throttle
   "Throttles the number of requests that will be passed through to the
   dependency. `cap` is the count of requests that will be passed through in the
@@ -183,20 +202,5 @@
         (throw (ex-info "request timed out" {:timeout-ms timeout-ms}))
         result))))
 
-;; ## Proposed Strategies
-;; * Timeout
-;; * Retry (up to N times, configurable interval--static, increasing, ...)
-;;   Depending on order composed, each retry could be counted as its own failure
-;;   (thus tripping the circuit after a certain number), or the whole retry
-;;   process could count as a single failure. (e.g. wrap consecutive-failures
-;;   before or after this?)
-
-; Create a circuit: `(def my-circuit (circuit/consecutive-failures 3))`
-; Invoke a function through a circuit: `(circuit/call my-circuit (get-stuff-from-foo))`
-; Wrap a function in a circuit: `(def maybe-get-stuff-from-foo (circuit/wrap my-circuit get-stuff-from-foo))`
-;
 ; Odd use case: circuit breaker that breaks only for particular arguments
 ; (e.g. if a given URL can't be retrieved, only break for that URL).
-;
-; Test before reclosing (let a single request through, if fails, then leave
-; open). Potentially renew reclose TTL.
