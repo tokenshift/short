@@ -1,5 +1,6 @@
 (ns short.core
-  (:require [clj-time.core :as t]
+  (:require [clj-time.coerce :as c]
+            [clj-time.core :as t]
             [clojure.core.cache :as cache]))
 
 ;; # Base circuit definition
@@ -157,9 +158,22 @@
       (when (and (nil? @deadline) (open? circuit))
         (reset! deadline (t/from-now ttl))))))
 
+(defn rps-throttle
+  "Throttles the number of requests that will be passed through to the dependency."
+  [handler rps]
+  (let [requests (atom [])]
+    (fn [circuit & args]
+      (let [cutoff (c/to-long (t/ago (t/seconds 1)))
+            cleanup (fn [reqs] (drop-while #(< % cutoff) reqs))]
+        (if (>= (count (swap! requests cleanup)) rps)
+          (throw (ex-info "request throttling in effect" {:rps rps}))
+          (try
+            (apply handler args)
+            (finally
+              (swap! requests conj (c/to-long (t/now))))))))))
+
+
 ;; ## Proposed Strategies
-;;
-;; * Throttling (static or dynamic, based on failure level)
 ;; * Timeout
 ;; * Retry (up to N times, configurable interval--static, increasing, ...)
 ;;   Depending on order composed, each retry could be counted as its own failure
