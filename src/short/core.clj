@@ -16,7 +16,7 @@
 (defn closed?
   "Checks whether the circuit is closed."
   [circuit]
-  (::closed @circuit))
+  @(::closed circuit))
 
 (defn open?
   "Checks whether the circuit is open."
@@ -26,13 +26,13 @@
 (defn close!
   "Closes the circuit, allowing additional calls to be made through it."
   [circuit]
-  (swap! circuit assoc ::closed true)
+  (reset! (::closed circuit) true)
   circuit)
 
 (defn open!
   "Opens the circuit, preventing further calls from being made through it."
   [circuit]
-  (swap! circuit assoc ::closed false)
+  (reset! (::closed circuit) false)
   circuit)
 
 (defn call!
@@ -101,16 +101,29 @@
           (when (>= @failures n)
             (open! circuit)))))))
 
-;; # Strategies
+(defn fast-fail
+  "Fails immediately if the circuit is open, without making any calls to
+  subsequent handlers."
+  [handler]
+  (fn [circuit & args]
+    (if (closed? circuit)
+      (apply handler args)
+      (throw (ex-info "circuit is broken" {})))))
 
-;; Limits how many calls through the circuit can currently be active, in case
-;; the dependency starts backing up.
-
-;; Breaks the circuit after N consecutive failures, resetting the count on
-;; every success.
-
-;; Recloses the circuit after a certain amount of time has passed.
-;; TTL should be clj-time Interval.
+(defn reclose-ttl
+  "Recloses the circuit after a certain amount of time has passed.
+  TTL should be a clj-time Interval."
+  [handler ttl]
+  (let [deadline (atom nil)]
+    (fn [circuit & args]
+      ; Close the circuit if the TTL has passed.
+      (when (and @deadline (t/after? (t/now) @deadline))
+        (close! circuit)
+        (reset! deadline nil))
+      (apply handler args)
+      ; Start the TTL countdown if the circuit is broken.
+      (when (and (nil? @deadline) (open? circuit))
+        (reset! deadline (t/from-now ttl))))))
 
 ; Create a circuit: `(def my-circuit (circuit/consecutive-failures 3))`
 ; Invoke a function through a circuit: `(circuit/call my-circuit (get-stuff-from-foo))`

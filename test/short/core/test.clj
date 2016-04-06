@@ -1,6 +1,7 @@
 (ns short.core.test
   (:use [clojure.test]
-        [short.core]))
+        [short.core])
+  (:require [clj-time.core :as t]))
 
 (defn failer
   "Returns a function that can be forced to start failing or succeeding on
@@ -48,8 +49,78 @@
         result2 (future (call! c plugged))
         result3 (future (call! c plugged))
         result4 (future (call! c plugged))]
+    (Thread/sleep 50)
     (deliver plug 42)
     (is (= 42 @result1))
     (is (= 42 @result2))
     (is (thrown-with-msg? Exception #"concurrency limit reached" @result3))
     (is (thrown-with-msg? Exception #"concurrency limit reached" @result4))))
+
+(deftest test-consecutive-failures
+  (let [f (-> (failer) (set-rval! :test))
+        c (circuit-> (consecutive-failures 3))]
+    ; Stays closed while the dependency is working
+    (call! c f)
+    (call! c f)
+    (call! c f)
+    (call! c f)
+    (is (closed? c))
+    ; Breaks after three failures
+    (start-failing! f)
+    (call! c f)
+    (is (closed? c))
+    (call! c f)
+    (is (closed? c))
+    (call! c f)
+    (is (not (closed? c)))
+    ; Resets the count on every success
+    (close! c)
+    (stop-failing! f)
+    (call! c f)
+    (start-failing! f)
+    (call! c f)
+    (is (closed? c))
+    (call! c f)
+    (is (closed? c))
+    (stop-failing! f)
+    (call! c f)
+    (is (closed? c))
+    (start-failing! f)
+    (call! c f)
+    (is (closed? c))
+    (call! c f)
+    (is (closed? c))
+    (call! c f)
+    (is (not (closed? c)))))
+
+(deftest test-fast-fail
+  (let [f (failer)
+        c (circuit-> (fast-fail))]
+    (is (= 0 (count (failer-calls f))))
+    (is (nil? (call! c f)))
+    (is (= 1 (count (failer-calls f))))
+    (open! c)
+    (is (thrown-with-msg? Exception #"circuit is broken" (call! c f)))
+    (is (= 1 (count (failer-calls f))))))
+
+(deftest test-reclose-ttl
+  (let [f (failer)
+        c (circuit-> (reclose-ttl (t/millis 250)))]
+    (open! c)
+    (call! c f)
+    (is (not (closed? c)))
+    (Thread/sleep 50)
+    (call! c f)
+    (is (not (closed? c)))
+    (Thread/sleep 50)
+    (call! c f)
+    (is (not (closed? c)))
+    (Thread/sleep 50)
+    (call! c f)
+    (is (not (closed? c)))
+    (Thread/sleep 50)
+    (call! c f)
+    (is (not (closed? c)))
+    (Thread/sleep 50)
+    (call! c f)
+    (is (closed? c))))
