@@ -6,7 +6,7 @@
 ;; # Circuit Breakers
 
 (defn- default-handler
-  [f & args]
+  [circuit f & args]
   (apply f args))
 
 (defn circuit
@@ -89,12 +89,12 @@
              (let [result (cache/lookup c args)]
                (swap! cache-atom cache/hit args)
                result)
-             (let [result (apply handler args)]
+             (let [result (apply handler circuit args)]
                (swap! cache-atom cache/miss args result)
                result)))
          ; Hit the dependency, and only check the cache if it fails.
          (try
-           (let [result (apply handler args)]
+           (let [result (apply handler circuit args)]
              (swap! cache-atom cache/miss args result)
              result)
            (catch Exception ex
@@ -116,7 +116,7 @@
         (throw (ex-info "concurrency limit reached" {:current @current :limit n})))
       (swap! current inc)
       (try
-        (apply handler args)
+        (apply handler circuit args)
         (finally
           (swap! current dec))))))
 
@@ -127,12 +127,14 @@
   (let [failures (atom 0)]
     (fn [circuit & args]
       (try
-        (apply handler args)
-        (reset! failures 0)
+        (let [result (apply handler circuit args)]
+          (reset! failures 0)
+          result)
         (catch Exception ex
           (swap! failures inc)
           (when (>= @failures n)
-            (open! circuit)))))))
+            (open! circuit))
+          (throw ex))))))
 
 (defn fast-fail
   "Fails immediately if the circuit is open, without making any calls to
@@ -140,7 +142,7 @@
   [handler]
   (fn [circuit & args]
     (if (closed? circuit)
-      (apply handler args)
+      (apply handler circuit args)
       (throw (ex-info "circuit is broken" {})))))
 
 (defn reclose-ttl
@@ -153,10 +155,11 @@
       (when (and @deadline (t/after? (t/now) @deadline))
         (close! circuit)
         (reset! deadline nil))
-      (apply handler args)
-      ; Start the TTL countdown if the circuit is broken.
-      (when (and (nil? @deadline) (open? circuit))
-        (reset! deadline (t/from-now ttl))))))
+      (let [result (apply handler circuit args)]
+        ; Start the TTL countdown if the circuit is broken.
+        (when (and (nil? @deadline) (open? circuit))
+          (reset! deadline (t/from-now ttl)))
+        result))))
 
 (defn retry
   "Retries any failing calls at a configurable interval.
@@ -167,7 +170,7 @@
   (fn [circuit & args]
     (loop [tries 1]
       (let [result (try
-                     (apply handler args)
+                     (apply handler circuit args)
                      (catch Exception ex
                        (let [interval (interval-fn tries)]
                          (when (nil? interval) (throw ex))
@@ -189,7 +192,7 @@
         (if (>= (count (swap! log cleanup)) cap)
           (throw (ex-info "request throttling in effect" {:cap cap :period period}))
           (try
-            (apply handler args)
+            (apply handler circuit args)
             (finally
               (swap! log conj (c/to-long (t/now))))))))))
 
@@ -197,7 +200,7 @@
   "Adds a configurable timeout to a dependency."
   [handler timeout-ms]
   (fn [circuit & args]
-    (let [result (deref (future (apply handler args)) timeout-ms ::timeout)]
+    (let [result (deref (future (apply handler circuit args)) timeout-ms ::timeout)]
       (if (= ::timeout result)
         (throw (ex-info "request timed out" {:timeout-ms timeout-ms}))
         result))))
