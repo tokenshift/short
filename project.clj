@@ -1,4 +1,4 @@
-(defproject short "0.1"
+(defproject tokenshift/short "0.1.0"
   :description "Circuit breakers for Clojure functions."
   :url "https://github.com/tokenshift/short"
   :license {:name "Eclipse Public License"

@@ -19,48 +19,57 @@ you'd create a circuit-per-dependency or similar. You DO NOT need to create a
 new circuit for each call; it's a gateway, not a command. In fact, doing this
 would lose any of the circuit state information from the previous call.
 
-### Breakers
+## Example Use
 
-Every circuit has a *breaker* that determines whether the circuit should be
-broken based on the result of an individual call. Usually, this will be a count
-or percentage of failures (exceptions thrown); once some threshold is reached,
-the breaker marks the circuit as "open", and subsequent calls to (through) the
-circuit go immediatly to the circuit's configured fallback behavior.
+```clojure
+(def my-circuit (-> (circuit)
+                    (with-strategy concurrency-limit 10)
+                    (with-strategy consecutive-failures 5))
+```
 
-Breakers also have configurable "reclose" behavior, usually "half-closing" the
-circuit once a certain amount of time has passed and allowing a single call
-through to test whether the dependency is now responsive, and closing the
-circuit completely if it is.
+A `circuit->` macro is provided to make this easier:
 
-**Success** means the call returned a value (any value).
-**Failure** is indicated by throwing an exception rather than returning.
+```clojure
+(def my-circuit (circuit-> (concurrency-limit 10)
+                           (consecutive-failures 5)))
+```
 
-### Timeouts
+## Strategies
 
-A timeout can be optionally added to any circuit, even when the underlying
-request doesn't support it. In this case, **short** will execute the request in
-a separate thread, blocking on the result (for a certain amount of time).
+Strategies are order-dependent and wrap each other, like Ring middleware. The
+last added strategy will get the call/request first, then pass it up the chain;
+the return value (or exception) will flow back down the chain in the opposite
+order.
 
-If the timeout is exceeded, the call fails. NOTE: the underlying call could
-still eventually go through, so ONLY retry it if the request is idempotent (or
-sending it more than once won't have a bad result).
+**`caching`**  
+Takes a clojure.core.cache/CacheProtocol implementation, and caches successful
+responses. Can be configured to return a cached response on any request, or
+only on failure.
 
-### Retry
+**`concurrency-limit`**  
+Caps the maximum number of simultaneous calls that can be made to a dependency
+to avoid overloading it if it hangs.
 
-Similarly, circuits can be configured to retry the request (upon failure) a
-certain number of times. Each failure still counts as such, so a single
-repeatedly retried call could be enough to break the circuit.
+**`consecutive-failures`**  
+Breaks the circuit if N calls in a row fail.
 
-TBD: configurable retry interval (constant, climbing, fibonacci)
+**`fast-fail`**  
+If the circuit is open (broken), fail immediately with an exception rather than
+making a call against the dependency.
 
-### Workers/Pools
+**`reclose-ttl`**  
+Re-close the circuit after a certain amount of time has passed.
 
-**Short** allows you to limit how many concurrent requests can be handled by
-a circuit, to avoid piling up work on a just-started-to-fail dependency before
-finally breaking the circuit. If a circuit's "worker threshold" is reached, any
-subsequent calls automatically fail and invoke the fallback behavior.
+**`retry`**  
+Retry on failure up to a certain number of times, with a configurable retry
+interval.
 
-Pooling/semaphore implementation TBD
+**`throttle`**  
+Limit the number of calls to the dependency that will be allowed through in a
+certain amount of time. Any further calls will fail with an exception.
+
+**`timeout`**  
+Add a configurable timeout (in milliseconds) to a circuit.
 
 ## References
 

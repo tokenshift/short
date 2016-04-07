@@ -1,0 +1,62 @@
+<h1>Short</h1>
+<p><a href="https://travis-ci.org/tokenshift/short"><img src="https://travis-ci.org/tokenshift/short.svg?branch=master" alt="Build Status" /></a></p>
+<p>An implementation of the <a href="http://techblog.netflix.com/2011/12/making-netflix-api-more-resilient.html">circuit breaker</a>
+pattern. Based on <a href="https://github.com/Netflix/Hystrix">Netflix/Hystrix</a>,
+implemented in pure Clojure.</p>
+<h2>How it Works</h2>
+<p>The core concept of <strong>Short</strong> is the <em>circuit</em>. A circuit is a wrapper around
+a dependency (a single API, endpoint or query) that could potentially be flaky
+or unresponsive. The circuit tracks all calls to that API, and if enough calls
+fail (or timeout), it &quot;breaks&quot;, no longer allowing subsequent calls through for
+a certain amount of time.</p>
+<p>Technically, you can call any function through any circuit, though usually
+you'd create a circuit-per-dependency or similar. You DO NOT need to create a
+new circuit for each call; it's a gateway, not a command. In fact, doing this
+would lose any of the circuit state information from the previous call.</p>
+<h2>Example Use</h2>
+<pre><code class="language-clojure">(def my-circuit (-&gt; (circuit)
+                    (with-strategy concurrency-limit 10)
+                    (with-strategy consecutive-failures 5))
+</code></pre>
+<p>A <code>circuit-&gt;</code> macro is provided to make this easier:</p>
+<pre><code class="language-clojure">(def my-circuit (circuit-&gt; (concurrency-limit 10)
+                           (consecutive-failures 5)))
+</code></pre>
+<h2>Strategies</h2>
+<p>Strategies are order-dependent and wrap each other, like Ring middleware. The
+last added strategy will get the call/request first, then pass it up the chain;
+the return value (or exception) will flow back down the chain in the opposite
+order.</p>
+<p><strong><code>caching</code></strong><br />
+Takes a clojure.core.cache/CacheProtocol implementation, and caches successful
+responses. Can be configured to return a cached response on any request, or
+only on failure.</p>
+<p><strong><code>concurrency-limit</code></strong><br />
+Caps the maximum number of simultaneous calls that can be made to a dependency
+to avoid overloading it if it hangs.</p>
+<p><strong><code>consecutive-failures</code></strong><br />
+Breaks the circuit if N calls in a row fail.</p>
+<p><strong><code>fast-fail</code></strong><br />
+If the circuit is open (broken), fail immediately with an exception rather than
+making a call against the dependency.</p>
+<p><strong><code>reclose-ttl</code></strong><br />
+Re-close the circuit after a certain amount of time has passed.</p>
+<p><strong><code>retry</code></strong><br />
+Retry on failure up to a certain number of times, with a configurable retry
+interval.</p>
+<p><strong><code>throttle</code></strong><br />
+Limit the number of calls to the dependency that will be allowed through in a
+certain amount of time. Any further calls will fail with an exception.</p>
+<p><strong><code>timeout</code></strong><br />
+Add a configurable timeout (in milliseconds) to a circuit.</p>
+<h2>References</h2>
+<ul>
+<li><a href="https://github.com/Netflix/Hystrix">Netflix/Hystrix</a>
+<ul>
+<li><a href="https://github.com/Netflix/Hystrix/wiki/How-it-Works">How it Works</a></li>
+</ul>
+</li>
+<li><a href="https://github.com/clojure/core.async">core/async</a></li>
+<li><a href="http://martinfowler.com/bliki/CircuitBreaker.html">CircuitBreaker</a></li>
+<li><a href="http://techblog.netflix.com/2011/12/making-netflix-api-more-resilient.html">Making the Netflix API More Resilient</a></li>
+</ul>
