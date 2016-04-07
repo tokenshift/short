@@ -70,7 +70,7 @@
 (defmacro circuit->
   "Constructs a new circuit and wraps it with a series of strategies."
   [& forms]
-  (let [injected (map #(cons 'with-strategy %) forms)]
+  (let [injected (map #(cons 'short.core/with-strategy %) forms)]
     `(-> (circuit)
          ~@injected)))
 
