@@ -3,7 +3,28 @@
             [clj-time.core :as t]
             [clojure.core.cache :as cache]))
 
-;; # Circuit Breakers
+;; # Short
+;;
+;; [<img src="https://travis-ci.org/tokenshift/short.svg?branch=master" alt="Build Status" title="Build Status">](https://travis-ci.org/tokenshift/short)
+;;
+;; An implementation of the [circuit breaker](http://techblog.netflix.com/2011/12/making-netflix-api-more-resilient.html)
+;; pattern. Based on [Netflix/Hystrix](https://github.com/Netflix/Hystrix),
+;; implemented in pure Clojure.
+;;
+;; ## How it Works
+;;
+;; The core concept of **Short** is the *circuit*. A circuit is a wrapper around
+;; a dependency (a single API, endpoint or query) that could potentially be flaky
+;; or unresponsive. The circuit tracks all calls to that API, and if enough calls
+;; fail (or timeout), it "breaks", no longer allowing subsequent calls through for
+;; a certain amount of time.
+;;
+;; Technically, you can call any function through any circuit, though usually
+;; you'd create a circuit-per-dependency or similar. You DO NOT need to create a
+;; new circuit for each call; it's a gateway, not a command. In fact, doing this
+;; would lose any of the circuit state information from the previous call.
+
+;; ## Base Circuit Breaker
 
 (defn- default-handler
   [circuit f & args]
@@ -41,26 +62,28 @@
   [circuit & args]
   (apply (::handler circuit) circuit args))
 
-;; # Circuit Strategies
+;; ## Circuit Strategies
 ;;
 ;; Each of these wraps a circuit with additional behavior such as breaking the
 ;; circuit if a certain number of requests fails, or returning a cached
 ;; response on failure.
 ;;
-;; Example Use:
+;; ## Example Use
 ;;
-;; ```clojure
-;; (-> (circuit)
-;;     (with-strategy concurrency-limit 10)
-;;     (with-strategy consecutive-failures 5))
-;; ```
+;;     (def my-circuit
+;;          (-> (circuit)
+;;              (with-strategy concurrency-limit 10)
+;;              (with-strategy consecutive-failures 5))
 ;;
 ;; A `circuit->` macro is provided to make this easier:
 ;;
-;; ```clojure
-;; (circuit-> (concurrency-limit 10)
-;;            (consecutive-failures 5))
-;; ```
+;;     (def my-circuit
+;;          (circuit-> (concurrency-limit 10)
+;;                     (consecutive-failures 5)))
+;;
+;; Then use `call!` to make calls through the circuit:
+;;
+;;     (call! my-circuit do-some-work arg1 arg2)
 
 (defn with-strategy
   "Wraps a circuit with the specified strategy."

@@ -22,6 +22,8 @@
           (recur b (+ a b) (+ i 1)))))))
 
 (defn fibonacci
+  "Determines the next interval by adding together the two previous intervals,
+  fibonacci-style."
   [start-interval max-tries]
   (with-max-tries #(* (fib (- % 1)) start-interval) max-tries))
 
