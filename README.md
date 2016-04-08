@@ -40,6 +40,8 @@ Then use `call!` to make calls through the circuit:
 (call! my-circuit do-some-work arg1 arg2)
 ```
 
+See the [API docs](http://tokenshift.com/short/) for more complete documentation.
+
 ## Strategies
 
 Strategies are order-dependent and wrap each other, like Ring middleware. The
