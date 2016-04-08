@@ -34,6 +34,12 @@ A `circuit->` macro is provided to make this easier:
                            (consecutive-failures 5)))
 ```
 
+Then use `call!` to make calls through the circuit:
+
+```clojure
+(call! my-circuit do-some-work arg1 arg2)
+```
+
 ## Strategies
 
 Strategies are order-dependent and wrap each other, like Ring middleware. The
