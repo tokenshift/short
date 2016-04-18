@@ -6,6 +6,9 @@ An implementation of the [circuit breaker](http://techblog.netflix.com/2011/12/m
 pattern. Based on [Netflix/Hystrix](https://github.com/Netflix/Hystrix),
 implemented in pure Clojure.
 
+Clojars: https://clojars.org/tokenshift/short
+Leiningen: `[tokenshift/short "0.1.2"]`
+
 ## How it Works
 
 The core concept of **Short** is the *circuit*. A circuit is a wrapper around
